@@ -1,0 +1,190 @@
+openapi: 3.0.3
+info:
+  title: OAuth2 / OIDC Authorization Server
+  version: 1.0.0
+  description: >
+    Authorization Server running on Spring Authorization Server.
+    Supports OAuth2 Authorization Code with PKCE, Refresh Token, and OpenID Connect.
+servers:
+  - url: http://localhost:9000
+    description: Local Authorization Server
+
+paths:
+  /.well-known/openid-configuration:
+    get:
+      summary: OpenID Provider Configuration
+      description: >
+        Returns OIDC discovery metadata with information about authorization, token, userinfo,
+        and JWK endpoints.
+      responses:
+        "200":
+          description: OpenID Connect discovery metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  issuer: http://localhost:9000
+                  authorization_endpoint: http://localhost:9000/oauth2/authorize
+                  token_endpoint: http://localhost:9000/oauth2/token
+                  jwks_uri: http://localhost:9000/oauth2/jwks
+                  userinfo_endpoint: http://localhost:9000/userinfo
+                  response_types_supported: ["code"]
+                  grant_types_supported: ["authorization_code", "refresh_token"]
+                  code_challenge_methods_supported: ["S256"]
+
+  /oauth2/authorize:
+    get:
+      summary: OAuth2 Authorization Endpoint
+      description: >
+        Used by clients to request user authorization. Supports PKCE.
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            example: code
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+            example: oidc-client
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            example: http://localhost:5173/login/oauth2/code/oidc-client
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            example: "openid profile"
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code_challenge
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: code_challenge_method
+          in: query
+          required: true
+          schema:
+            type: string
+            example: S256
+      responses:
+        "302":
+          description: Redirects to client with authorization code or error
+
+  /oauth2/token:
+    post:
+      summary: OAuth2 Token Endpoint
+      description: >
+        Exchanges authorization codes for access tokens and refresh tokens.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code, refresh_token]
+                code:
+                  type: string
+                redirect_uri:
+                  type: string
+                client_id:
+                  type: string
+                  example: oidc-client
+                code_verifier:
+                  type: string
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Successful token response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  refresh_token:
+                    type: string
+                  id_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 3600
+        "400":
+          description: Invalid request
+
+  /userinfo:
+    get:
+      summary: OpenID Connect UserInfo Endpoint
+      description: >
+        Returns claims about the authenticated end-user.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile information
+          content:
+            application/json:
+              schema:
+                type: object
+                example:
+                  sub: "1234567890"
+                  name: "John Doe"
+                  preferred_username: "johndoe"
+                  email: "john@example.com"
+
+  /oauth2/jwks:
+    get:
+      summary: JSON Web Key Set
+      description: Returns the JSON Web Key Set containing public keys used to verify JWTs.
+      responses:
+        "200":
+          description: JWKS response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        kty:
+                          type: string
+                          example: RSA
+                        use:
+                          type: string
+                          example: sig
+                        kid:
+                          type: string
+                        n:
+                          type: string
+                        e:
+                          type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
